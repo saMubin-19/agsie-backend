@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  backend:
+    build: .
+    container_name: agsie-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      - db
+
+  db:
+    image: postgis/postgis:15-3.3
+    container_name: agsie-postgis
+    environment:
+      POSTGRES_USER: agsie
+      POSTGRES_PASSWORD: agsie
+      POSTGRES_DB: agsie_db
+    ports:
+      - "5432:5432"
+
