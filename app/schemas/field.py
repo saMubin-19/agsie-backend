@@ -1,10 +1,7 @@
 from pydantic import BaseModel
-from typing import List
-
-class Geometry(BaseModel):
-    type: str
-    coordinates: List
+from typing import Any
 
 class FieldCreate(BaseModel):
     type: str
-    geometry: Geometry
+    geometry: Any
+

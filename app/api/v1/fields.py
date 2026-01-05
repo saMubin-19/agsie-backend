@@ -1,50 +1,52 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from geoalchemy2.shape import from_shape
+from shapely.geometry import shape
+import random
+
+from app.db.session import get_db
+from app.models.field import Field
 from app.schemas.field import FieldCreate
 
 router = APIRouter()
 
-def calculate_area_hectares(coordinates):
-    """
-    Very simple polygon area estimation (demo logic)
-    """
-    points = coordinates[0]
-    area = 0.0
-
-    for i in range(len(points) - 1):
-        x1, y1 = points[i]
-        x2, y2 = points[i + 1]
-        area += (x1 * y2) - (x2 * y1)
-
-    area = abs(area) / 2
-
-    # rough conversion factor (mock)
-    return round(area * 100, 2)
-
-def ndvi_status_from_area(area):
-    """
-    Mock NDVI logic
-    """
-    if area < 1:
-        return "Poor"
-    elif area < 3:
-        return "Moderate"
-    else:
-        return "Healthy"
-
 @router.post("/fields")
-def analyze_field(field: FieldCreate):
-    if field.geometry.type != "Polygon":
-        raise HTTPException(status_code=400, detail="Only Polygon supported")
+def create_field(payload: FieldCreate, db: Session = Depends(get_db)):
+    geom_shape = shape(payload.geometry)
 
-    coords = field.geometry.coordinates
-    area_ha = calculate_area_hectares(coords)
-    ndvi_status = ndvi_status_from_area(area_ha)
+    area_ha = geom_shape.area * 12365  # rough lat/lon → hectares
+    ndvi = random.choice(["Healthy", "Moderate", "Poor"])
+
+    field = Field(
+        area_hectares=round(area_ha, 2),
+        ndvi_status=ndvi,
+        geometry=from_shape(geom_shape, srid=4326),
+    )
+
+    db.add(field)
+    db.commit()
+    db.refresh(field)
 
     return {
-        "message": "Field analyzed",
-        "area_hectares": area_ha,
-        "ndvi_status": ndvi_status,
-        "recommendation": "Maintain irrigation" if ndvi_status == "Healthy" else "Increase monitoring"
+        "message": "Field saved",
+        "id": field.id,
+        "area_hectares": field.area_hectares,
+        "ndvi_status": field.ndvi_status,
     }
+
+
+@router.get("/fields")
+def list_fields(db: Session = Depends(get_db)):
+    fields = db.query(Field).all()
+
+    return [
+        {
+            "id": f.id,
+            "area_hectares": f.area_hectares,
+            "ndvi_status": f.ndvi_status,
+        }
+        for f in fields
+    ]
+
 
 

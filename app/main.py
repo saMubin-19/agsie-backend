@@ -1,8 +1,13 @@
+from app.db.database import engine
+from app.models.field import Base
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.health import router as health_router
 from app.api.v1.fields import router as fields_router
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AGSIE Backend")
 
