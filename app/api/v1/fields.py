@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from geoalchemy2.shape import from_shape
+from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import shape
 import random
 
@@ -10,11 +10,19 @@ from app.schemas.field import FieldCreate
 
 router = APIRouter()
 
+
+# =========================
+# CREATE FIELD (POST)
+# =========================
 @router.post("/fields")
 def create_field(payload: FieldCreate, db: Session = Depends(get_db)):
+    """
+    Save field geometry into PostGIS
+    """
     geom_shape = shape(payload.geometry)
 
-    area_ha = geom_shape.area * 12365  # rough lat/lon → hectares
+    # Rough conversion (mock but realistic for now)
+    area_ha = geom_shape.area * 12365
     ndvi = random.choice(["Healthy", "Moderate", "Poor"])
 
     field = Field(
@@ -35,8 +43,14 @@ def create_field(payload: FieldCreate, db: Session = Depends(get_db)):
     }
 
 
+# =========================
+# LIST FIELDS (GET) – GEOJSON
+# =========================
 @router.get("/fields")
 def list_fields(db: Session = Depends(get_db)):
+    """
+    Return all fields with geometry as GeoJSON
+    """
     fields = db.query(Field).all()
 
     return [
@@ -44,6 +58,12 @@ def list_fields(db: Session = Depends(get_db)):
             "id": f.id,
             "area_hectares": f.area_hectares,
             "ndvi_status": f.ndvi_status,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    list(to_shape(f.geometry).exterior.coords)
+                ]
+            }
         }
         for f in fields
     ]
