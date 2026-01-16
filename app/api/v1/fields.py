@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import shape
@@ -19,7 +19,10 @@ def create_field(payload: FieldCreate, db: Session = Depends(get_db)):
     """
     Save field geometry into PostGIS
     """
-    geom_shape = shape(payload.geometry)
+    try:
+        geom_shape = shape(payload.geometry)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid GeoJSON geometry")
 
     # Rough conversion (mock but realistic for now)
     area_ha = geom_shape.area * 12365
@@ -62,11 +65,35 @@ def list_fields(db: Session = Depends(get_db)):
                 "type": "Polygon",
                 "coordinates": [
                     list(to_shape(f.geometry).exterior.coords)
-                ]
-            }
+                ],
+            },
         }
         for f in fields
     ]
+
+
+# =========================
+# DELETE FIELD (DELETE)
+# =========================
+@router.delete("/fields/{field_id}")
+def delete_field(field_id: int, db: Session = Depends(get_db)):
+    """
+    Delete a field by ID
+    """
+    field = db.query(Field).filter(Field.id == field_id).first()
+
+    if not field:
+        raise HTTPException(status_code=404, detail="Field not found")
+
+    db.delete(field)
+    db.commit()
+
+    return {
+        "message": "Field deleted",
+        "id": field_id,
+    }
+
+
 
 
 
