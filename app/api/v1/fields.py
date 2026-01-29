@@ -94,6 +94,40 @@ def delete_field(field_id: int, db: Session = Depends(get_db)):
     }
 
 
+# =========================
+# EXPORT FIELD (GEOJSON)
+# =========================
+@router.get("/fields/{field_id}/export/geojson")
+def export_field_geojson(field_id: int, db: Session = Depends(get_db)):
+    """
+    Export a single field as GeoJSON FeatureCollection
+    """
+    field = db.query(Field).filter(Field.id == field_id).first()
+
+    if not field:
+        raise HTTPException(status_code=404, detail="Field not found")
+
+    geom = to_shape(field.geometry)
+
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "id": field.id,
+                    "area_hectares": field.area_hectares,
+                    "ndvi_status": field.ndvi_status,
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [list(geom.exterior.coords)],
+                },
+            }
+        ],
+    }
+
+
 
 
 
