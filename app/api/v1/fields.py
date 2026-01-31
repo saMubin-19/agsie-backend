@@ -25,7 +25,7 @@ def create_field(payload: FieldCreate, db: Session = Depends(get_db)):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid GeoJSON geometry")
 
-    area_ha = geom_shape.area * 12365
+    area_ha = geom_shape.area * 12365  # mock conversion
     ndvi = random.choice(["Healthy", "Moderate", "Poor"])
 
     field = Field(
@@ -70,7 +70,44 @@ def list_fields(db: Session = Depends(get_db)):
 
 
 # =========================
-# EXPORT GEOJSON (4.4.1)
+# UPDATE FIELD GEOMETRY (PATCH) — 4.5.1
+# =========================
+@router.patch("/fields/{field_id}")
+def update_field_geometry(
+    field_id: int,
+    payload: FieldCreate,
+    db: Session = Depends(get_db),
+):
+    field = db.query(Field).filter(Field.id == field_id).first()
+
+    if not field:
+        raise HTTPException(status_code=404, detail="Field not found")
+
+    try:
+        geom_shape = shape(payload.geometry)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid GeoJSON geometry")
+
+    area_ha = geom_shape.area * 12365
+    ndvi = random.choice(["Healthy", "Moderate", "Poor"])
+
+    field.geometry = from_shape(geom_shape, srid=4326)
+    field.area_hectares = round(area_ha, 2)
+    field.ndvi_status = ndvi
+
+    db.commit()
+    db.refresh(field)
+
+    return {
+        "message": "Field updated",
+        "id": field.id,
+        "area_hectares": field.area_hectares,
+        "ndvi_status": field.ndvi_status,
+    }
+
+
+# =========================
+# EXPORT FIELD — GEOJSON (4.4.1)
 # =========================
 @router.get("/fields/{field_id}/export/geojson")
 def export_field_geojson(field_id: int, db: Session = Depends(get_db)):
@@ -98,7 +135,7 @@ def export_field_geojson(field_id: int, db: Session = Depends(get_db)):
 
 
 # =========================
-# EXPORT SHAPEFILE (4.4.3)
+# EXPORT FIELD — SHAPEFILE (4.4.3)
 # =========================
 @router.get("/fields/{field_id}/export/shapefile")
 def export_field_shapefile(field_id: int, db: Session = Depends(get_db)):
@@ -110,7 +147,6 @@ def export_field_shapefile(field_id: int, db: Session = Depends(get_db)):
     geom = to_shape(field.geometry)
     geojson_geom = mapping(geom)
 
-    # Create shapefile in memory
     shp_io = io.BytesIO()
     shx_io = io.BytesIO()
     dbf_io = io.BytesIO()
@@ -128,10 +164,8 @@ def export_field_shapefile(field_id: int, db: Session = Depends(get_db)):
 
     writer.record(field.id, field.area_hectares, field.ndvi_status)
     writer.shape(geojson_geom)
-
     writer.close()
 
-    # Create ZIP
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
         zipf.writestr("field.shp", shp_io.getvalue())
@@ -168,7 +202,11 @@ def delete_field(field_id: int, db: Session = Depends(get_db)):
     db.delete(field)
     db.commit()
 
-    return {"message": "Field deleted", "id": field_id}
+    return {
+        "message": "Field deleted",
+        "id": field_id,
+    }
+
 
 
 
