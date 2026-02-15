@@ -3,7 +3,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import shape, mapping
-import random
 import io
 import zipfile
 import shapefile  # pyshp
@@ -11,8 +10,26 @@ import shapefile  # pyshp
 from app.db.session import get_db
 from app.models.field import Field
 from app.schemas.field import FieldCreate
+from app.services.ndvi_engine import calculate_ndvi_status
 
 router = APIRouter()
+
+# =========================
+# AI LOGIC — NDVI CALCULATION
+# =========================
+def calculate_ndvi_status(area_hectares: float) -> str:
+    """
+    Mock AI NDVI logic.
+    Later this will be replaced by real Sentinel-2 model.
+    """
+
+    if area_hectares < 1:
+        return "Poor"
+    elif area_hectares < 3:
+        return "Moderate"
+    else:
+        return "Healthy"
+
 
 
 # =========================
@@ -26,7 +43,7 @@ def create_field(payload: FieldCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invalid GeoJSON geometry")
 
     area_ha = geom_shape.area * 12365  # mock conversion
-    ndvi = random.choice(["Healthy", "Moderate", "Poor"])
+    ndvi = calculate_ndvi_status(area_ha)
 
     field = Field(
         area_hectares=round(area_ha, 2),
@@ -89,7 +106,7 @@ def update_field_geometry(
         raise HTTPException(status_code=400, detail="Invalid GeoJSON geometry")
 
     area_ha = geom_shape.area * 12365
-    ndvi = random.choice(["Healthy", "Moderate", "Poor"])
+    ndvi = calculate_ndvi_status(area_ha)
 
     field.geometry = from_shape(geom_shape, srid=4326)
     field.area_hectares = round(area_ha, 2)
