@@ -1,13 +1,18 @@
-from sqlalchemy import Column, Integer, Float, String
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import Column, Integer, Float, String, ForeignKey
+from sqlalchemy.orm import relationship
 from geoalchemy2 import Geometry
 
-Base = declarative_base()
+from app.db.base import Base
+
 
 class Field(Base):
     __tablename__ = "fields"
 
     id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"))
+
+    user = relationship("User", back_populates="fields")
 
     area_hectares = Column(Float, nullable=False)
     ndvi_status = Column(String, nullable=False)
@@ -16,4 +21,5 @@ class Field(Base):
         Geometry(geometry_type="POLYGON", srid=4326),
         nullable=False
     )
+
 

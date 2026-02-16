@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from app.models.field import Base
+
+from app.db.base import Base
 
 
 class User(Base):
@@ -13,3 +15,6 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    fields = relationship("Field", back_populates="user")
+
