@@ -8,7 +8,6 @@ from app.api.v1.health import router as health_router
 from app.api.v1.fields import router as fields_router
 from app.api.v1.auth import router as auth_router
 
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AGSIE Backend")
 
