@@ -7,4 +7,5 @@ geoalchemy2
 psycopg2-binary
 shapely
 pyshp
+alembic
 
