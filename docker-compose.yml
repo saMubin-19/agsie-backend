@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   backend:
     build: .
@@ -8,6 +10,8 @@ services:
       - db
     environment:
       DATABASE_URL: postgresql://agsie:agsie@db:5432/agsie_db
+    volumes:
+      - .:/app
 
   db:
     image: postgis/postgis:15-3.3
@@ -23,5 +27,7 @@ services:
 
 volumes:
   postgis_data:
+
+
 
 
