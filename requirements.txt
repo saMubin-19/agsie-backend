@@ -8,4 +8,6 @@ psycopg2-binary
 shapely
 pyshp
 alembic
+python-jose[cryptography]
+passlib[bcrypt]
 
