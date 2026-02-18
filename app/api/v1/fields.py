@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import shape, mapping
+
 import io
 import zipfile
 import shapefile  # pyshp
@@ -15,8 +17,6 @@ from app.services.ndvi_engine import calculate_ndvi_status
 router = APIRouter()
 
 
-
-
 # =========================
 # CREATE FIELD (POST)
 # =========================
@@ -27,7 +27,19 @@ def create_field(payload: FieldCreate, db: Session = Depends(get_db)):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid GeoJSON geometry")
 
-    area_ha = geom_shape.area * 12365  # mock conversion
+    # Convert geometry to WKT for PostGIS area calculation
+    wkt = geom_shape.wkt
+
+    # Accurate area calculation using PostGIS geography
+    area_m2 = db.query(
+        func.ST_Area(func.ST_GeogFromText(wkt))
+    ).scalar()
+
+    if area_m2 is None:
+        raise HTTPException(status_code=400, detail="Failed to calculate area")
+
+    area_ha = area_m2 / 10000
+
     ndvi = calculate_ndvi_status(area_ha)
 
     field = Field(
@@ -55,24 +67,22 @@ def create_field(payload: FieldCreate, db: Session = Depends(get_db)):
 def list_fields(db: Session = Depends(get_db)):
     fields = db.query(Field).all()
 
-    return [
-        {
+    result = []
+    for f in fields:
+        geom = to_shape(f.geometry)
+
+        result.append({
             "id": f.id,
             "area_hectares": f.area_hectares,
             "ndvi_status": f.ndvi_status,
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [
-                    list(to_shape(f.geometry).exterior.coords)
-                ],
-            },
-        }
-        for f in fields
-    ]
+            "geometry": mapping(geom),
+        })
+
+    return result
 
 
 # =========================
-# UPDATE FIELD GEOMETRY (PATCH) — 4.5.1
+# UPDATE FIELD GEOMETRY (PATCH)
 # =========================
 @router.patch("/fields/{field_id}")
 def update_field_geometry(
@@ -90,7 +100,17 @@ def update_field_geometry(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid GeoJSON geometry")
 
-    area_ha = geom_shape.area * 12365
+    # Recalculate area correctly
+    wkt = geom_shape.wkt
+
+    area_m2 = db.query(
+        func.ST_Area(func.ST_GeogFromText(wkt))
+    ).scalar()
+
+    if area_m2 is None:
+        raise HTTPException(status_code=400, detail="Failed to calculate area")
+
+    area_ha = area_m2 / 10000
     ndvi = calculate_ndvi_status(area_ha)
 
     field.geometry = from_shape(geom_shape, srid=4326)
@@ -109,7 +129,7 @@ def update_field_geometry(
 
 
 # =========================
-# EXPORT FIELD — GEOJSON (4.4.1)
+# EXPORT FIELD — GEOJSON
 # =========================
 @router.get("/fields/{field_id}/export/geojson")
 def export_field_geojson(field_id: int, db: Session = Depends(get_db)):
@@ -137,7 +157,7 @@ def export_field_geojson(field_id: int, db: Session = Depends(get_db)):
 
 
 # =========================
-# EXPORT FIELD — SHAPEFILE (4.4.3)
+# EXPORT FIELD — SHAPEFILE
 # =========================
 @router.get("/fields/{field_id}/export/shapefile")
 def export_field_shapefile(field_id: int, db: Session = Depends(get_db)):
