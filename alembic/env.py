@@ -1,83 +1,85 @@
 from logging.config import fileConfig
-
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
+from sqlalchemy import engine_from_config, pool
 from alembic import context
+import os
 
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
+# Alembic Config object
 config = context.config
 
-import os
+# Override DB URL from environment
 config.set_main_option(
     "sqlalchemy.url",
     os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
 )
 
-
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# Logging
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-from app.models.field import Base
-from app.models.user import User
-from app.models.field import Field
+# -------------------------------------------------
+# IMPORT YOUR REAL BASE + MODELS
+# -------------------------------------------------
+from app.db.base import Base
+from app.models import user, field  # important: import models so metadata registers
 
 target_metadata = Base.metadata
 
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
-
-
-def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
-
-    This configures the context with just a URL
-    and not an Engine, though an Engine is acceptable
-    here as well.  By skipping the Engine creation
-    we don't even need a DBAPI to be available.
-
-    Calls to context.execute() here emit the given string to the
-    script output.
-
-    """
-    url = config.get_main_option("sqlalchemy.url")
-    context.configure(
-        url=url,
-        target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
-    )
-
-    with context.begin_transaction():
-        context.run_migrations()
-
-
+# -------------------------------------------------
+# FILTER OUT POSTGIS SYSTEM TABLES
+# -------------------------------------------------
 def include_object(object, name, type_, reflected, compare_to):
-    # Ignore all system schemas
-    if hasattr(object, "schema"):
-        if object.schema in ["tiger", "topology"]:
-            return False
+    # Ignore PostGIS system schemas
+    if hasattr(object, "schema") and object.schema in ["tiger", "topology"]:
+        return False
 
-    # Ignore PostGIS system tables
+    # Ignore PostGIS internal tables
     if type_ == "table" and name in [
         "spatial_ref_sys",
+        "geometry_columns",
+        "geography_columns",
+        "raster_columns",
+        "raster_overviews",
+        "pg_stat_statements",
+        "pg_type",
+        "pg_attribute",
+        "pg_class",
+        "pg_namespace",
+        "pg_index",
+        "pg_constraint",
+        "pg_proc",
+        "pg_depend",
+        "pg_description",
+        "pagc_gaz",
+        "pagc_lex",
     ]:
         return False
 
     return True
 
 
+# -------------------------------------------------
+# OFFLINE MIGRATIONS
+# -------------------------------------------------
+def run_migrations_offline() -> None:
+    url = config.get_main_option("sqlalchemy.url")
 
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
+        compare_type=True,
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+# -------------------------------------------------
+# ONLINE MIGRATIONS
+# -------------------------------------------------
 def run_migrations_online() -> None:
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
@@ -87,20 +89,21 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-    connection=connection,
-    target_metadata=target_metadata,
-    include_object=include_object,
-    include_schemas=False,
-    compare_type=True,
-)
-
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=include_object,
+            compare_type=True,
+        )
 
         with context.begin_transaction():
             context.run_migrations()
 
 
-
+# -------------------------------------------------
+# RUN
+# -------------------------------------------------
 if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
+

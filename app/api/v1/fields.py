@@ -7,30 +7,55 @@ from shapely.geometry import shape, mapping
 
 import io
 import zipfile
-import shapefile  # pyshp
+import shapefile
 
 from app.db.session import get_db
 from app.models.field import Field
+from app.models.user import User
 from app.schemas.field import FieldCreate
 from app.services.ndvi_engine import calculate_ndvi_status
+from app.api.deps import get_current_user  # adjust path if needed
 
 router = APIRouter()
+
+
+
+# =========================
+# CRS VALIDATION HELPER
+# =========================
+def validate_geometry_crs(geom_shape):
+    if geom_shape.geom_type != "Polygon":
+        raise HTTPException(
+            status_code=400,
+            detail="Only Polygon geometries are supported"
+        )
+
+    for x, y in geom_shape.exterior.coords:
+        if not (-180 <= x <= 180 and -90 <= y <= 90):
+            raise HTTPException(
+                status_code=400,
+                detail="Coordinates must be in WGS84 (EPSG:4326)"
+            )
+
 
 
 # =========================
 # CREATE FIELD (POST)
 # =========================
 @router.post("/fields")
-def create_field(payload: FieldCreate, db: Session = Depends(get_db)):
+def create_field(
+    payload: FieldCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
         geom_shape = shape(payload.geometry)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid GeoJSON geometry")
-
-    # Convert geometry to WKT for PostGIS area calculation
+    
+    validate_geometry_crs(geom_shape)
+    # Accurate PostGIS area calculation
     wkt = geom_shape.wkt
-
-    # Accurate area calculation using PostGIS geography
     area_m2 = db.query(
         func.ST_Area(func.ST_GeogFromText(wkt))
     ).scalar()
@@ -39,13 +64,13 @@ def create_field(payload: FieldCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Failed to calculate area")
 
     area_ha = area_m2 / 10000
-
     ndvi = calculate_ndvi_status(area_ha)
 
     field = Field(
         area_hectares=round(area_ha, 2),
         ndvi_status=ndvi,
         geometry=from_shape(geom_shape, srid=4326),
+        user_id=current_user.id,
     )
 
     db.add(field)
@@ -64,13 +89,30 @@ def create_field(payload: FieldCreate, db: Session = Depends(get_db)):
 # LIST FIELDS (GET)
 # =========================
 @router.get("/fields")
-def list_fields(db: Session = Depends(get_db)):
-    fields = db.query(Field).all()
+def list_fields(
+    skip: int = 0,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Prevent abuse
+    limit = min(limit, 100)
+
+    fields = (
+        db.query(Field)
+        .filter(Field.user_id == current_user.id)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    total = db.query(Field).filter(
+        Field.user_id == current_user.id
+    ).count()
 
     result = []
     for f in fields:
         geom = to_shape(f.geometry)
-
         result.append({
             "id": f.id,
             "area_hectares": f.area_hectares,
@@ -78,19 +120,29 @@ def list_fields(db: Session = Depends(get_db)):
             "geometry": mapping(geom),
         })
 
-    return result
+    return {
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "data": result,
+    }
+
 
 
 # =========================
-# UPDATE FIELD GEOMETRY (PATCH)
+# UPDATE FIELD
 # =========================
 @router.patch("/fields/{field_id}")
 def update_field_geometry(
     field_id: int,
     payload: FieldCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    field = db.query(Field).filter(Field.id == field_id).first()
+    field = db.query(Field).filter(
+        Field.id == field_id,
+        Field.user_id == current_user.id
+    ).first()
 
     if not field:
         raise HTTPException(status_code=404, detail="Field not found")
@@ -99,10 +151,9 @@ def update_field_geometry(
         geom_shape = shape(payload.geometry)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid GeoJSON geometry")
-
-    # Recalculate area correctly
+    
+    validate_geometry_crs(geom_shape)
     wkt = geom_shape.wkt
-
     area_m2 = db.query(
         func.ST_Area(func.ST_GeogFromText(wkt))
     ).scalar()
@@ -129,11 +180,18 @@ def update_field_geometry(
 
 
 # =========================
-# EXPORT FIELD — GEOJSON
+# EXPORT GEOJSON
 # =========================
 @router.get("/fields/{field_id}/export/geojson")
-def export_field_geojson(field_id: int, db: Session = Depends(get_db)):
-    field = db.query(Field).filter(Field.id == field_id).first()
+def export_field_geojson(
+    field_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    field = db.query(Field).filter(
+        Field.id == field_id,
+        Field.user_id == current_user.id
+    ).first()
 
     if not field:
         raise HTTPException(status_code=404, detail="Field not found")
@@ -157,11 +215,18 @@ def export_field_geojson(field_id: int, db: Session = Depends(get_db)):
 
 
 # =========================
-# EXPORT FIELD — SHAPEFILE
+# EXPORT SHAPEFILE
 # =========================
 @router.get("/fields/{field_id}/export/shapefile")
-def export_field_shapefile(field_id: int, db: Session = Depends(get_db)):
-    field = db.query(Field).filter(Field.id == field_id).first()
+def export_field_shapefile(
+    field_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    field = db.query(Field).filter(
+        Field.id == field_id,
+        Field.user_id == current_user.id
+    ).first()
 
     if not field:
         raise HTTPException(status_code=404, detail="Field not found")
@@ -193,12 +258,6 @@ def export_field_shapefile(field_id: int, db: Session = Depends(get_db)):
         zipf.writestr("field.shp", shp_io.getvalue())
         zipf.writestr("field.shx", shx_io.getvalue())
         zipf.writestr("field.dbf", dbf_io.getvalue())
-        zipf.writestr(
-            "field.prj",
-            'GEOGCS["WGS 84",DATUM["WGS_1984",'
-            'SPHEROID["WGS 84",6378137,298.257223563]],'
-            'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]',
-        )
 
     zip_buffer.seek(0)
 
@@ -215,8 +274,15 @@ def export_field_shapefile(field_id: int, db: Session = Depends(get_db)):
 # DELETE FIELD
 # =========================
 @router.delete("/fields/{field_id}")
-def delete_field(field_id: int, db: Session = Depends(get_db)):
-    field = db.query(Field).filter(Field.id == field_id).first()
+def delete_field(
+    field_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    field = db.query(Field).filter(
+        Field.id == field_id,
+        Field.user_id == current_user.id
+    ).first()
 
     if not field:
         raise HTTPException(status_code=404, detail="Field not found")
@@ -228,11 +294,6 @@ def delete_field(field_id: int, db: Session = Depends(get_db)):
         "message": "Field deleted",
         "id": field_id,
     }
-
-
-
-
-
 
 
 

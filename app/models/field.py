@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, Float, String, ForeignKey
 from sqlalchemy.orm import relationship
 from geoalchemy2 import Geometry
 
-from app.db.base import Base
+from app.db.base import Base   # ← keep this
 
 
 class Field(Base):
@@ -10,7 +10,7 @@ class Field(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     user = relationship("User", back_populates="fields")
 
@@ -21,5 +21,6 @@ class Field(Base):
         Geometry(geometry_type="POLYGON", srid=4326),
         nullable=False
     )
+
 
 
