@@ -14,21 +14,6 @@ from app.services.ndvi_engine import calculate_ndvi_status
 
 router = APIRouter()
 
-# =========================
-# AI LOGIC — NDVI CALCULATION
-# =========================
-def calculate_ndvi_status(area_hectares: float) -> str:
-    """
-    Mock AI NDVI logic.
-    Later this will be replaced by real Sentinel-2 model.
-    """
-
-    if area_hectares < 1:
-        return "Poor"
-    elif area_hectares < 3:
-        return "Moderate"
-    else:
-        return "Healthy"
 
 
 
