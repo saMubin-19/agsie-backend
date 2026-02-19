@@ -14,7 +14,8 @@ from app.models.field import Field
 from app.models.user import User
 from app.schemas.field import FieldCreate
 from app.services.ndvi_engine import calculate_ndvi_status
-from app.api.deps import get_current_user  # adjust path if needed
+
+
 
 router = APIRouter()
 
