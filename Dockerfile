@@ -3,9 +3,10 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies (needed for PostGIS later)
 RUN apt-get update && apt-get install -y \
     gcc \
+    gdal-bin \
+    libgdal-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first (better caching)
