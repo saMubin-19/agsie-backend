@@ -16,7 +16,8 @@ from app.schemas.field import FieldCreate
 from app.services.ndvi_engine import calculate_ndvi_status
 from app.api.v1 import auth
 
-
+from app.services.satellite.sentinel_loader import search_latest_scene
+from app.services.satellite.ndvi_processor import compute_ndvi
 
 router = APIRouter()
 
@@ -298,4 +299,39 @@ def delete_field(
     }
 
 
+# =========================
+# ANALYZE FIELD (NDVI)
+# =========================
+@router.post("/fields/{field_id}/analyze")
+def analyze_field_ndvi(
+    field_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth.get_current_user),
+):
+    field = db.query(Field).filter(
+        Field.id == field_id,
+        Field.user_id == current_user.id
+    ).first()
 
+    if not field:
+        raise HTTPException(status_code=404, detail="Field not found")
+
+    geom = to_shape(field.geometry)
+    bbox = list(geom.bounds)
+
+    scene = search_latest_scene(bbox)
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="No satellite image found")
+
+    ndvi_value = compute_ndvi(
+        scene["red"],
+        scene["nir"],
+        geom
+    )
+
+    return {
+        "field_id": field.id,
+        "scene_date": scene["date"],
+        "ndvi_mean": ndvi_value,
+    }
