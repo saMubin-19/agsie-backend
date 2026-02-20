@@ -14,6 +14,7 @@ from app.models.field import Field
 from app.models.user import User
 from app.schemas.field import FieldCreate
 from app.services.ndvi_engine import calculate_ndvi_status
+from app.api.v1 import auth
 
 
 
@@ -47,7 +48,7 @@ def validate_geometry_crs(geom_shape):
 def create_field(
     payload: FieldCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+   current_user: User = Depends(auth.get_current_user)
 ):
     try:
         geom_shape = shape(payload.geometry)
@@ -94,7 +95,7 @@ def list_fields(
     skip: int = 0,
     limit: int = 10,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(auth.get_current_user)
 ):
     # Prevent abuse
     limit = min(limit, 100)
@@ -138,7 +139,7 @@ def update_field_geometry(
     field_id: int,
     payload: FieldCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(auth.get_current_user)
 ):
     field = db.query(Field).filter(
         Field.id == field_id,
@@ -187,7 +188,7 @@ def update_field_geometry(
 def export_field_geojson(
     field_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(auth.get_current_user)
 ):
     field = db.query(Field).filter(
         Field.id == field_id,
@@ -222,7 +223,7 @@ def export_field_geojson(
 def export_field_shapefile(
     field_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(auth.get_current_user)
 ):
     field = db.query(Field).filter(
         Field.id == field_id,
@@ -278,7 +279,7 @@ def export_field_shapefile(
 def delete_field(
     field_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(auth.get_current_user)
 ):
     field = db.query(Field).filter(
         Field.id == field_id,
