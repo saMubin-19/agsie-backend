@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, Float, String, ForeignKey
 from sqlalchemy.orm import relationship
 from geoalchemy2 import Geometry
 
-from app.db.base import Base   
+from app.db.database import Base   
 
 class Field(Base):
     __tablename__ = "fields"
