@@ -1,6 +1,3 @@
-from app.db.database import engine
-from app.models.field import Base
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
