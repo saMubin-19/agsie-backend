@@ -3,7 +3,6 @@ from sqlalchemy.orm import relationship
 from geoalchemy2 import Geometry
 
 from app.db.base import Base   
-from sqlalchemy.orm import relationship
 
 class Field(Base):
     __tablename__ = "fields"
@@ -16,6 +15,12 @@ class Field(Base):
 
     area_hectares = Column(Float, nullable=False)
     ndvi_status = Column(String, nullable=False)
+    
+    analyses = relationship(
+    "FieldAnalysis",
+    back_populates="field",
+    cascade="all, delete"
+)
 
     geometry = Column(
         Geometry(geometry_type="POLYGON", srid=4326),
