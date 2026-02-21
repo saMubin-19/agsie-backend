@@ -2,8 +2,8 @@ from sqlalchemy import Column, Integer, Float, String, ForeignKey
 from sqlalchemy.orm import relationship
 from geoalchemy2 import Geometry
 
-from app.db.base import Base   # ← keep this
-
+from app.db.base import Base   
+from sqlalchemy.orm import relationship
 
 class Field(Base):
     __tablename__ = "fields"
